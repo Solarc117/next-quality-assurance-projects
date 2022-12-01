@@ -6,7 +6,7 @@ import Footer from '../../components/footer'
 export default function MetricImperialPage() {
   return (
     <>
-      <Header currentPath={'/metric-imperial'} />
+      <Header currentPath=  '/metric-imperial' />
       <hr />
       <MetricImperial />
       <hr />

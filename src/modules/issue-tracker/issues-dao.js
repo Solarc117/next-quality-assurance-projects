@@ -59,19 +59,37 @@ export default class IssuesDAO {
   }
 
   /**
-   * @description Attempts to fetch a single Project document matching the passed project name.
+   * @description Attempts to fetch a single Project document matching the passed project name. If an index argument exists, returns the issue under said index.
    * @param {string} project The name of the project.
+   * @param {number} [issueIndex] The index of a single issue to project, if any.
    * @returns {Promise<{ error: string } | Project | null>} An object containing an error property if the find method fails, or a document or null depending on whether a match was found.
    */
-  static async fetchProject(project) {
+  static async fetchProject(project, issueIndex) {
     if (!DB) await this.connect()
 
     // Filters the issues array after finding a match. Might be possibile to integrate a pipeline for this functionality - maybe reformat the document structure to each individually represent an issue, and have the collection represent the project?
     try {
-      const query = { project },
-        result = await DB.findOne(query)
+      const matchProjectStage = {
+          $match: {
+            project,
+          },
+        },
+        projectIssueAtIndexStage = {
+          $project: {
+            _id: 0,
+            issue: {
+              $arrayElemAt: ['$issues', issueIndex],
+            },
+          },
+        },
+        pipeline = [matchProjectStage]
+      if (typeof issueIndex === 'number')
+        // @ts-ignore
+        pipeline.push(projectIssueAtIndexStage)
 
-      return result
+      const result = await DB.aggregate(pipeline).toArray()
+
+      return result[0]
     } catch (err) {
       error(`error querying ${COLLECTION} collection:`, err)
       return { error: err.message }

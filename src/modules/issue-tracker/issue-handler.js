@@ -51,7 +51,6 @@ export default class IssueHandler {
             ? queryValue === issueValue
             : issueValue.match(new RegExp(queryValue, 'i'))
         }
-        return true
       })
     }
     function queryAndIssuesValid(DAOResult, queryObj) {
@@ -68,6 +67,22 @@ export default class IssueHandler {
     delete issueQueries.project
     if (typeof issueQueries.open === 'string' && issueQueries.open.length > 0)
       issueQueries.open = new Boolean(issueQueries.open).valueOf()
+
+    if (typeof issueQueries.index === 'string') {
+      if (issueQueries.index.match(/[^\d]/g))
+        return res
+          .status(400)
+          .json({ error: 'invalid index - please enter a positive integer' })
+
+      const issueIndex = +issueQueries.index,
+        result = await IssuesDAO.fetchProject(sanitizedProjectName, issueIndex)
+
+      return typeof result?.error === 'string'
+        ? res
+            .status(500)
+            .json({ error: `could not fetch issue at index ${issueIndex}` })
+        : res.status(200).json(result?.issue || {})
+    }
 
     const result = await IssuesDAO.fetchProject(sanitizedProjectName)
 
@@ -94,13 +109,6 @@ export default class IssueHandler {
    * @param {object} res The Express response object.
    */
   static async appendIssue(req, res) {
-    function updateIssueDates(issue) {
-      const date = new Date(),
-        today = `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`
-
-      issue.created_on = today
-      issue.last_updated = today
-    }
     const { query: issue } = req,
       { project: projectName } = issue,
       sanitizedProjectName = sanitize(projectName),
@@ -113,10 +121,11 @@ export default class IssueHandler {
         error: `unexpected open property of type ${openType} on project - expected a boolean or undefined`,
       })
 
-    updateIssueDates(issue)
-
     // Do not require a trycatch block for the following asynchronous method, because it itself will handle errors returned by the db and return an object with an error property.
-    const result = await IssuesDAO.upsertProject(sanitizedProjectName, issue)
+    const result = await IssuesDAO.upsertProject(
+      sanitizedProjectName,
+      this.#updateIssueDates(issue)
+    )
 
     // Remember to verify that all error properties the DAO returns are SERVER, and not CLIENT errors. DAO should only be dealing with server errors at this point; client errors (bad requests) should be handled by the handler.
     result?.error
@@ -188,7 +197,7 @@ export default class IssueHandler {
    * @param {object} req The Express request body.
    * @param {object} res The Express response body.
    */
-  static async patch(req, res) {
+  static async updateIssue(req, res) {
     const {
         body,
         params: { project },
@@ -231,4 +240,11 @@ export default class IssueHandler {
 
     return res.status(deleteResult?.error ? 500 : 200).json(deleteResult)
   }
+
+  /**
+   * @description Returns a new issue, with the last_updated property set to the current date. Assings the current date to created_on if that property is invalid.
+   * @param {Issue} issue The issue to update.
+   * @returns {Issue} A copy of the issue argument, with updated last_updated & created_on properties.
+   */
+  static #updateIssueDates(issue) {}
 }

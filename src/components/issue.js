@@ -56,6 +56,64 @@ export default function Issue() {
 
     setData(JSON.stringify(result, null, 2))
   }
+  async function fetchIssueToUpdate(event) {
+    event.preventDefault()
+    setData(JSON.stringify({ message: 'fetching issue to update...' }))
+
+    // @ts-ignore
+    const formChildren = issueIndexForm.current.children,
+      { value: projectName } = formChildren[0],
+      { value: index } = formChildren[2],
+      apiEndpoint = `/api/issues/${encodeURIComponent(
+        projectName.trim()
+      )}?index=${index}`,
+      response = await fetch(apiEndpoint),
+      result = await response.json()
+
+    if (typeof result?.error !== 'string') {
+      window.sessionStorage.setItem('index', `${index}`)
+      window.sessionStorage.setItem('projectName', projectName)
+      setIssueToUpdate(result)
+    }
+    setData(JSON.stringify(result, null, 2))
+  }
+  async function updateIssue(event, newIssue) {
+    event.preventDefault()
+    if (
+      window.sessionStorage.getItem('index') === null ||
+      window.sessionStorage.getItem('projectName') === null
+    )
+      return setData(
+        JSON.stringify({
+          error:
+            'please specify a project and an index for an issue in the Update Issue form',
+        })
+      )
+    setData(JSON.stringify({ message: 'updating issue...' }))
+
+    // issue a patch request to api/issues/:project, with the index as a query param & the issue in the body
+
+    const apiURL = new URL(
+      `/api/issues/${window.sessionStorage.getItem('projectName')}`,
+      window.location.href
+    )
+    apiURL.searchParams.set(
+      'index',
+      window.sessionStorage.getItem('index') || ''
+    )
+
+    try {
+      const response = await fetch(apiURL.href, {
+          method: 'PATCH',
+          body: newIssue,
+        }),
+        result = await response.json()
+
+      setData(result)
+    } catch (err) {
+      setData(JSON.stringify({ error: 'could not complete the request' }))
+    }
+  }
   const submitFields = [
       {
         tag: 'input',
@@ -71,7 +129,7 @@ export default function Issue() {
         name: 'text',
         placeholder: '*Text',
         label: 'Text:',
-        required: true,
+        required: false,
       },
       {
         tag: 'input',
@@ -128,9 +186,11 @@ export default function Issue() {
     submitIssueProject = useRef(null),
     issueFilters = useRef(null),
     submitIssueFields = useRef(null),
+    issueIndexForm = useRef(null),
     [data, setData] = useState(
       '{ "message": "submit a form to see its result here" }'
-    )
+    ),
+    [issueToUpdate, setIssueToUpdate] = useState({})
 
   return (
     <main>
@@ -312,8 +372,19 @@ export default function Issue() {
         </form>
 
         <h3 className={styles.title}>Update Issue</h3>
-        <form className={styles.form} id='issueIndexForm'>
-          <input type='text' name='project' placeholder='*Project' required />
+        {/* @ts-ignore */}
+        <form
+          ref={issueIndexForm}
+          className={styles.form}
+          onSubmit={fetchIssueToUpdate}
+        >
+          <input
+            type='text'
+            name='project'
+            placeholder='*Project'
+            title='Project Title'
+            required
+          />
           <br />
           <input
             type='number'
@@ -321,35 +392,78 @@ export default function Issue() {
             step='1'
             name='issue-name'
             placeholder='*Issue Index'
+            title='Issue Index'
             required
           />
           <br />
           <button type='submit'>Fetch Issue To Update</button>
         </form>
 
-        <div className={styles.hidden}>
+        <div
+          className={
+            Object.keys(issueToUpdate).length === 0 ? styles.hidden : ''
+          }
+        >
           <h4>Issue Fields to Update</h4>
-          <form className={styles.form} id='updateForm'>
-            <input type='text' name='new-title' placeholder='title' />
-            <br />
-            <textarea name='new-text' placeholder='text' />
-            <br />
-            <input
-              type='text'
-              name='new-assigned-to'
-              placeholder='assigned to'
-            />
-            <br />
-            <input
-              type='text'
-              name='new-status-text'
-              placeholder='status text'
-            />
-            <br />
-            <label>
-              <input type='checkbox' name='new-open' defaultChecked /> Open
-            </label>
-            <br />
+          <form
+            className={styles.form}
+            onSubmit={event => updateIssue(event, issueToUpdate)}
+          >
+            <fieldset className={`${styles.fieldset} ${styles['flex-grid']}`}>
+              <label>
+                Title:
+                <br />
+                <input
+                  type='text'
+                  name='new-title'
+                  placeholder='title'
+                  // @ts-ignore
+                  defaultValue={issueToUpdate.title || ''}
+                  required
+                />
+              </label>
+              <label>
+                Text:
+                <br />
+                <textarea
+                  name='new-text'
+                  placeholder='Text'
+                  // @ts-ignore
+                  defaultValue={issueToUpdate.text || ''}
+                />
+              </label>
+              <label>
+                Assigned To:
+                <br />
+                <input
+                  type='text'
+                  name='new-assigned-to'
+                  placeholder='Assigned to'
+                  defaultValue={issueToUpdate['assigned_to'] || ''}
+                />
+              </label>
+              <label>
+                Status Text:
+                <br />
+                <input
+                  type='text'
+                  name='new-status-text'
+                  placeholder='Status text'
+                  defaultValue={issueToUpdate['status_text'] || ''}
+                />
+              </label>
+              <label>
+                Open:
+                <br />
+                <input
+                  type='checkbox'
+                  name='new-open'
+                  // @ts-ignore
+                  defaultChecked={!!issueToUpdate.open}
+                />{' '}
+                Open
+              </label>
+            </fieldset>
             <button type='submit'>Update Issue</button>
           </form>
           <br />
@@ -362,7 +476,7 @@ export default function Issue() {
           <button type='submit'>Delete Issue</button>
         </form>
 
-        <code id='jsonResult'>{data}</code>
+        <code>{data}</code>
       </section>
     </main>
   )
